@@ -1,0 +1,292 @@
+#include <stdio.h>
+#include <stdbool.h>
+#include "util.h"
+
+EXEC SQL INCLUDE SQLCA; 
+
+char *author_ids;
+
+EXEC SQL BEGIN DECLARE SECTION;
+    char name[23];
+    char url[43];
+    char pubid[11];
+    char title[71];
+    char publisher[51];
+    char appearsin[11];
+    char type[12];
+    sqlint32 aid;
+    sqlint32 aorder;
+    sqlint32 year;
+    sqlint32 volume;
+    sqlint32 number;
+	sqlint32 startpage;
+	sqlint32 endpage;
+    sqlint32 exists;
+EXEC SQL END DECLARE SECTION;
+
+void update_publication() {
+    char *pubid_conv;
+    pubid_conv = strtok(NULL, "#");
+    strcpy(pubid, pubid_conv);
+    char *title_conv;
+    title_conv = strtok(NULL, "#");
+    strcpy(title, title_conv);
+    
+    EXEC SQL
+        select count(*) INTO :exists
+        from publication p
+        where p.pubid = :pubid;
+
+    if(exists) {
+        EXEC SQL
+            update publication
+            set title = :title
+            where pubid = :pubid;
+
+    }
+    else {
+        EXEC SQL
+            insert into publication (pubid, title)
+            values (:pubid, :title);
+
+    }
+    printf("Pubid: %s\n", pubid);
+}
+
+void update_authors() {
+    // Delete all wrote tuples for this :pubid
+    EXEC SQL
+        delete from wrote
+        where pubid = :pubid;
+   
+    printf("Authors: ");
+    
+    // For each aid, insert wrote tuple
+    aid = strtok(author_ids, ";");
+    for(aorder = 1; aid != 0; aorder++) {
+        aid = atoi(aid); 
+        EXEC SQL
+            insert into wrote (aid, pubid, aorder)
+            values (:aid, :pubid, :aorder);
+
+        printf("%d, ", aid);
+        aid = strtok(NULL, ";");
+    }
+    printf("\n");
+}
+
+void update_author() {
+    aid = atoi(strtok(NULL, "#"));
+    char *name_conv;
+    name_conv = strtok(NULL, ")");
+    strcpy(name, name_conv);
+
+    EXEC SQL
+        select count(*) INTO :exists
+        from author a
+        where a.aid = :aid;
+
+    if(exists) {
+        EXEC SQL
+            update author 
+            set name = :name
+            where aid = :aid;
+    }
+    else {
+        EXEC SQL
+            insert into author (aid, name)
+            values (:aid, :name);
+    }    
+}
+
+void update_authorurl() {
+    aid = atoi(strtok(NULL, "#"));
+    char *url_conv;
+    url_conv = strtok(NULL, ")");
+    strcpy(url, url_conv);
+
+    EXEC SQL
+        update author
+        set url = :url
+        where aid = :aid;
+}
+
+void update_book() {
+    update_publication();   // This will set :pubid and :title
+    
+    printf("Type: book\n");
+    printf("Title: %s\n", title);
+
+    author_ids = strtok(NULL, "#");
+    
+    char *publisher_conv;
+    publisher_conv = strtok(NULL, "#");
+    strcpy(publisher, publisher_conv);
+
+    year = atoi(strtok(NULL, ")"));
+
+    update_authors();
+
+    EXEC SQL
+        select count(*) INTO :exists
+        from book b
+        where b.pubid = :pubid;
+
+    if(exists) {
+        EXEC SQL
+            update book
+            set publisher = :publisher, year = :year
+            where pubid = :pubid;
+    
+    }
+    else {
+        EXEC SQL
+            insert into book (pubid, publisher, year)
+            values (:pubid, :publisher, :year);    
+    }
+
+    printf("Publisher: %s\n", publisher);
+    printf("Year: %d\n\n", year);
+}
+
+void update_journal() {
+    update_publication();   // This will set :pubid and :title
+    
+    volume = atoi(strtok(NULL, "#"));
+    number = atoi(strtok(NULL, "#"));
+    year = atoi(strtok(NULL, ")"));
+
+    EXEC SQL
+        select count(*) INTO :exists
+        from journal j
+        where j.pubid = :pubid;
+
+    if(exists) {
+        EXEC SQL
+            update journal
+            set volume = :volume, number = :number, year = :year
+            where pubid = :pubid;
+    }
+    else {
+        EXEC SQL
+            insert into journal (pubid, volume, number, year)
+            values (:pubid, :volume, :number, :year);
+    }
+
+    printf("Type: journal\n");
+    printf("Title: %s\n", title);
+    printf("Volume: %d\n", volume);
+    printf("Number: %d\n", number);
+    printf("Year: %d\n\n", year);
+}
+
+void update_proceedings() {
+    update_publication();   // This will set :pubid and :title
+    
+    year = atoi(strtok(NULL, ")"));
+
+    EXEC SQL
+        select count(*) INTO :exists
+        from proceedings pro
+        where pro.pubid = :pubid;
+
+    if(exists) {
+        EXEC SQL
+            update proceedings
+            set year = :year
+            where pubid = :pubid;
+    }
+    else {
+        EXEC SQL
+            insert into proceedings (pubid, year)
+            values (:pubid, :year);
+    }
+    
+    printf("Type: proceedings\n");
+    printf("Title: %s\n", title);
+    printf("Year: %d\n\n", year);
+}
+
+void update_article() {
+    update_publication();   // This will set :pubid and :title
+
+    printf("Type: article\n");
+    printf("Title: %s\n", title);
+
+    author_ids = strtok(NULL, "#");
+
+    char *appearsin_conv;
+    appearsin_conv = strtok(NULL, "#");
+    strcpy(appearsin, appearsin_conv);
+
+    startpage = atoi(strtok(NULL, "#"));
+    endpage = atoi(strtok(NULL, ")"));
+
+    update_authors();
+
+    EXEC SQL
+        select count(*) INTO :exists
+        from article art
+        where art.pubid = :pubid;
+
+    if(exists) {
+        EXEC SQL
+            update article
+            set appearsin = :appearsin, startpage = :startpage, endpage = :endpage
+            where pubid = :pubid;
+    }
+    else {
+        EXEC SQL
+            insert into article (pubid, appearsin, startpage, endpage)
+            values (:pubid, :appearsin, :startpage, :endpage);
+    }
+
+    printf("In: %s\n", appearsin);
+    printf("Pages: %d--%d\n\n", startpage, endpage);
+}
+
+int main(int argc, char *argv[]) {
+    char * getpass();
+
+    EXEC SQL BEGIN DECLARE SECTION;
+        char db[6] = "cs348";
+    EXEC SQL END DECLARE SECTION;
+    EXEC SQL WHENEVER SQLERROR  GO TO error;
+    EXEC SQL CONNECT TO :db;
+
+    char *line = NULL;
+    size_t len = 0;
+    char *token = NULL;   
+
+    getline(&line, &len, stdin);
+    while(!feof(stdin)) {
+        token = strtok(line, "(");
+        if(strcmp(token, "author") == 0)
+            update_author();
+        if(strcmp(token, "authorurl") == 0)
+            update_authorurl();
+        if(strcmp(token, "book") == 0)
+            update_book();
+        if(strcmp(token, "journal") == 0)
+            update_journal();
+        if(strcmp(token, "proceedings") == 0)
+            update_proceedings();
+        if(strcmp(token, "article") == 0)
+            update_article();
+        getline(&line, &len, stdin);
+    }    
+
+    free(line);
+    
+    EXEC SQL COMMIT;
+    EXEC SQL CONNECT reset;
+    exit(0);
+
+error:
+    check_error("My error",&sqlca);
+    EXEC SQL WHENEVER SQLERROR CONTINUE;
+
+    EXEC SQL ROLLBACK;
+    EXEC SQL CONNECT reset;
+    exit(1);
+}
