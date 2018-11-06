@@ -1,181 +1,196 @@
 #include <stdio.h>
-#include <stdbool.h>
+#include <string.h>
+#include <stdlib.h>
 #include "util.h"
+#include <stdbool.h>
 
 EXEC SQL INCLUDE SQLCA; 
+//EXEC SQL INCLUDE SQLDA; 
 
 EXEC SQL BEGIN DECLARE SECTION;
-	char a_name[23];
-	char name[23];
-    char pubid[11];
-    char title[71];
-    char publisher[51];
-    char appearsin[11];
-    char type[12];
-    sqlint32 year;
-    sqlint32 volume;
-    sqlint32 number;
-	sqlint32 startpage;
-	sqlint32 endpage;
+   char  db[6] = "cs348";
+   //char  sqlstmt[1000];
+   
+   char author_name[23];
+   char pubid[11];
+   char title[71];
+   char publisher[51];
+   splint32 year;
+   splint32 volume;
+   splint32 number;
+   char appearsin[11];
+   splint32 startpg;
+   splint32 startpg;
 EXEC SQL END DECLARE SECTION;
 
-
-void print_authors() {
-    EXEC SQL DECLARE C2 CURSOR FOR
-        select RTRIM(a.name)
-        from author a, wrote w
-        where w.pubid = :pubid
-            and a.aid = w.aid
-        order by w.aorder;
-    EXEC SQL OPEN C2;
-
-    EXEC SQL FETCH C2 INTO :name;    
-    printf("Authors: %s", name);
-
-    EXEC SQL FETCH C2 INTO :name;
+void print_author() {
+    EXEC SQL DECLARE C_AUTHOR CURSOR FOR
+        select name
+        from author a1, wrote w1
+        where w1.pubid = :pubid
+            and a1.aid = w1.aid
+        order by w1.aorder;
+    EXEC SQL OPEN C_AUTHOR;
+    EXEC SQL FETCH C_AUTHOR INTO :author_name;
+    printf("Authors: %s", author_name);
+    
     while(SQLCODE != 100){
-        printf(", %s", name);
-        EXEC SQL FETCH C2 INTO :name;
+    	EXEC SQL FETCH C_AUTHOR INTO :author_name;
+        printf(", %s", author_name);
+        EXEC SQL FETCH C_AUTHOR INTO :author_name;
     }
-    EXEC SQL CLOSE C2;
     printf("\n");
-}
-
-void print_proceedings() {
-    printf("Year: %d\n", year);
+    EXEC SQL CLOSE C2;
 }
 
 void print_book() {
     EXEC SQL
-        select b.publisher INTO :publisher
+        select b.publisher, b.year INTO :publisher, :year
         from book b
         where b.pubid = :pubid;
-    
-    print_authors();
-    printf("Publishher: %s\n", publisher);
+    print_author();
+    printf("Publisher: %s\n", publisher);
     printf("Year: %d\n", year);
 }
 
 void print_journal() {
     EXEC SQL
-        select j.volume, j.number INTO :volume, :number
+        select j.volume, j.number, j.year INTO :volume, :number, :year
         from journal j
-        where j.pubid = :pubid;
-
+        where pubid := j.pubid;
     printf("Volume: %d\n", volume);
     printf("Number: %d\n", number);
     printf("Year: %d\n", year);
 }
 
+void print_proceedings() {
+	EXEC SQL
+	select p.year INTO :year
+	from proceedings p
+	where p.pubid = :pubid;
+	printf("Year: %d\n", year);
+}
+
+
 void print_article() {
     EXEC SQL
-        select art.appearsin, art.startpage, art.endpage INTO :appearsin, :startpage, :endpage
-        from article art
-        where art.pubid = :pubid;
-
+        select a.appearsin, a.startpage, a.endpage INTO :appearsin, :startpg, :endpg
+        from article a
+        where a.pubid = :pubid;
     print_authors();
     printf("In: %s\n", appearsin);
     printf("Pages: %d--%d\n", startpage, endpage);
 }
 
-void print_pub() {
-    EXEC SQL
-        select p.title INTO :title
-        from publication p
-        where p.pubid = :pubid;
-    
-    printf("Title: %s\n", title);
-
-    if(strcmp(type, "proceedings") == 0)
-        print_proceedings();
-    else if(strcmp(type, "book") == 0)
-        print_book();
-    else if(strcmp(type, "journal") == 0)
-        print_journal();
-    else
-        print_article();
-
+/*void print_publication(){
+    if (!strcmp(type, "book")){
+    	print_book();
+    }else if (!strcmp(type, "journal")){
+    	print_journal();
+    }else if (!strcmp(type, "proceedings")){
+    	print_proceedings();
+    }else if (!strcmp(type, "article")){
+    	print_article();
+    }
     printf("\n");
-}
+}*/
 
-void get_pubids() {
+void sorted_publication(){   
     EXEC SQL DECLARE C1 CURSOR FOR
         with
-        author_pubids(name, pubid, title) as (
-            select a.name, p.pubid, p.title
-            from author a, wrote w, publication p
-            where a.aid = w.aid
-                    and a.name = :a_name
-                    and w.pubid = p.pubid
+        get_book(pubid, year, name) as(
+	   select p.pubid, b.year, a.name
+	   from publication p, book b, author a, wrote w
+	   where p.pubid = w.pubid
+	    and p.pubid = b.pubid
+	    and w.aid = a.aid
+	    and w.aorder = 1
         ),
-        a_books(pubid, year, type, name) as (
-            select b.pubid, b.year, 'book' as type, a.name
-            from author_pubids ap, book b, author a, wrote w
-            where ap.pubid = b.pubid
-                    and w.pubid = b.pubid
-                    and w.aid = a.aid
-                    and w.aorder = 1
-        ),
-        a_articles(pubid, appearsin, type, name) as (
-            select art.pubid, art.appearsin, 'article' as type, a.name
-            from author_pubids ap, article art, author a, wrote w
-            where ap.pubid = art.pubid
-                    and w.pubid = art.pubid
-                    and w.aid = a.aid
-                    and w.aorder = 1
-        ),
-        a_articles_in(pubid, year, type, name) as (
-            select pro.pubid, pro.year, 'proceedings' as type, '' as name
-            from a_articles art, proceedings pro
-            where art.appearsin = pro.pubid
-            union
-            select j.pubid, j.year, 'journal' as type, '' as name
-            from a_articles art, journal j
-            where art.appearsin = j.pubid
-        ),
-        a_article_years(pubid, year, type, name) as (
-            select art.pubid, pro.year, 'article' as type, art.name
-            from a_articles art, proceedings pro
-            where art.appearsin = pro.pubid
-            union
-            select art.pubid, j.year, 'article' as type, art.name
-            from a_articles art, journal j
-            where art.appearsin = j.pubid
-        )
-        select *
-        from a_article_years
+	get_jounal(pubid, year, name) as(
+	   select art.appearsin, j.year, a.name
+	   from article art, journal j, author a, wrote w
+	   where art.pubid = w.pubid
+	     and art.appearsin = j.pubid
+	     and w.aid = a.aid
+	),
+	get_proceedings(pubid, year, name) as (
+	   select art.appearsin, p.year, a.name
+           from article art, proceedings p, author a, wrote w
+	   where art.pubid = w.pubid
+		  and art.appearsin = p.pubid
+		  and w.aid = a.aid
+	),
+	get_article(pubid, year, name) as(
+	   select art.pubid, p.year, a.name
+	   from article art, proceedings p
+	   where art.appearsin = p.pubid
+	     and art.pubid = w.pubid
+	     and w.aid = a.aid
+	     and w.aorder = 1
+	   union
+	   select art.pubid, j.year
+	   from article art, journal j
+	   where art.appearsin = w.pubid
+	     and art.pubid = w.pubid
+	     and w.aid = a.aid
+	     and w.aorder = 1
+	)
+	select b.pubid, 'book' as type, b.year, a.name
+            from get_book b
         union
-        select *
-        from a_articles_in
+        select j.pubid, 'journal' as type, j.year, '' as name
+            from get_journal j
         union
-        select *
-        from a_books
+        select p.pubid, 'proceedings' as type, p.year, '' as name
+            from get_proceedings p
+        union
+        select art.pubid, 'article' as type, ar.year, a.name
+            from get_article art, author a, wrote w
         order by year desc, name asc;
-
     EXEC SQL OPEN C1;
 
-    EXEC SQL FETCH C1 INTO :pubid, :year, :type;
-    while(SQLCODE != 100){
-        printf("Pubid: %s\n", pubid);
-        printf("Type: %s\n", type);
-        print_pub();
-        EXEC SQL FETCH C1 INTO :pubid, :year, :type;
+    for( ; ; ){
+        EXEC SQL FETCH C1 INTO :pubid, :year, :author_name, :type;
+        if (SQLCODE == 100)  break;
+	else {
+	   EXEC SQL
+             select title INTO :title
+	     from publication
+	     where pubid = :pubid;
+         printf("Pubid: %s\n", pubid);
+         printf("Type: %s\n", type);
+         printf("Title: %s\n", title);
+
+         if (!strcmp(type, "book")){
+	 print_book();
+	 }else if (!strcmp(type, "journal")){
+	 print_journal();
+	 }else if (!strcmp(type, "proceedings")){
+	 print_proceedings();
+	 }else if (!strcmp(type, "article")){
+	 print_article();
+	 }
+	 printf("\n");
+      
     }
-    EXEC SQL CLOSE C1;	
+
+    EXEC SQL CLOSE C1;
 }
 
+
+//struct sqlda *slct;
+
 int main(int argc, char *argv[]) {
-   char * getpass();
-
-   EXEC SQL BEGIN DECLARE SECTION;
-      char db[6] = "cs348";
-   EXEC SQL END DECLARE SECTION;
+   /* bail out on error */
    EXEC SQL WHENEVER SQLERROR  GO TO error;
+
+   /* connect to the database */
    EXEC SQL CONNECT TO :db;
-
-   strcpy(a_name, argv[1]);
-   get_pubids();
-
+   printf("Connected to DB2\n");
+   strcpy(author_name, argv[1]);
+   sorted_publication();
+   
+   /* and get out of here */
    EXEC SQL COMMIT;
    EXEC SQL CONNECT reset;
    exit(0);
