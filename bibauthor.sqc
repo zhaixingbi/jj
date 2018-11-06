@@ -15,21 +15,21 @@ EXEC SQL BEGIN DECLARE SECTION;
    char pubid[11];
    char title[71];
    char publisher[51];
-   splint32 year;
-   splint32 volume;
-   splint32 number;
+   sqlint32 year;
+   sqlint32 volume;
+   sqlint32 number;
    char appearsin[11];
-   splint32 startpg;
-   splint32 startpg;
+   sqlint32 startpg;
+   sqlint32 endpg;
 EXEC SQL END DECLARE SECTION;
 
 void print_author() {
     EXEC SQL DECLARE C_AUTHOR CURSOR FOR
-        select name
-        from author a1, wrote w1
-        where w1.pubid = :pubid
-            and a1.aid = w1.aid
-        order by w1.aorder;
+        SELECT name
+        FROM author a1, wrote w1
+        WHERE w1.pubid = :pubid
+            AND a1.aid = w1.aid
+        ORDER BY w1.aorder;
     EXEC SQL OPEN C_AUTHOR;
     EXEC SQL FETCH C_AUTHOR INTO :author_name;
     printf("Authors: %s", author_name);
@@ -40,14 +40,14 @@ void print_author() {
         EXEC SQL FETCH C_AUTHOR INTO :author_name;
     }
     printf("\n");
-    EXEC SQL CLOSE C2;
+    EXEC SQL CLOSE C_AUTHOR;
 }
 
 void print_book() {
     EXEC SQL
-        select b.publisher, b.year INTO :publisher, :year
-        from book b
-        where b.pubid = :pubid;
+        SELECT b.publisher, b.year INTO :publisher, :year
+        FROM book b
+        WHERE b.pubid = :pubid;
     print_author();
     printf("Publisher: %s\n", publisher);
     printf("Year: %d\n", year);
@@ -55,9 +55,9 @@ void print_book() {
 
 void print_journal() {
     EXEC SQL
-        select j.volume, j.number, j.year INTO :volume, :number, :year
-        from journal j
-        where pubid := j.pubid;
+        SELECT j.volume, j.number, j.year INTO :volume, :number, :year
+        FROM journal j
+        WHERE j.pubid =:pubid;
     printf("Volume: %d\n", volume);
     printf("Number: %d\n", number);
     printf("Year: %d\n", year);
@@ -65,21 +65,21 @@ void print_journal() {
 
 void print_proceedings() {
 	EXEC SQL
-	select p.year INTO :year
-	from proceedings p
-	where p.pubid = :pubid;
+	SELECT p.year INTO :year
+	FROM proceedings p
+	WHERE p.pubid = :pubid;
 	printf("Year: %d\n", year);
 }
 
 
 void print_article() {
     EXEC SQL
-        select a.appearsin, a.startpage, a.endpage INTO :appearsin, :startpg, :endpg
-        from article a
-        where a.pubid = :pubid;
+        SELECT a.appearsin, a.startpage, a.endpage INTO :appearsin, :startpg, :endpg
+        FROM article a
+        WHERE a.pubid = :pubid;
     print_authors();
     printf("In: %s\n", appearsin);
-    printf("Pages: %d--%d\n", startpage, endpage);
+    printf("Pages: %d--%d\n", startpg, endpg);
 }
 
 /*void print_publication(){
@@ -99,54 +99,54 @@ void sorted_publication(){
     EXEC SQL DECLARE C1 CURSOR FOR
         with
         get_book(pubid, year, name) as(
-	   select p.pubid, b.year, a.name
-	   from publication p, book b, author a, wrote w
-	   where p.pubid = w.pubid
-	    and p.pubid = b.pubid
-	    and w.aid = a.aid
-	    and w.aorder = 1
+	   SELECT p.pubid, b.year, a.name
+	   FROM publication p, book b, author a, wrote w
+	   WHERE p.pubid = w.pubid
+	    AND p.pubid = b.pubid
+	    AND w.aid = a.aid
+	    AND w.aorder = 1
         ),
 	get_jounal(pubid, year, name) as(
-	   select art.appearsin, j.year, a.name
-	   from article art, journal j, author a, wrote w
-	   where art.pubid = w.pubid
-	     and art.appearsin = j.pubid
-	     and w.aid = a.aid
+	   SELECT art.appearsin, j.year, a.name
+	   FROM article art, journal j, author a, wrote w
+	   WHERE art.pubid = w.pubid
+	     AND art.appearsin = j.pubid
+	     AND w.aid = a.aid
 	),
 	get_proceedings(pubid, year, name) as (
-	   select art.appearsin, p.year, a.name
-           from article art, proceedings p, author a, wrote w
-	   where art.pubid = w.pubid
-		  and art.appearsin = p.pubid
-		  and w.aid = a.aid
+	   SELECT art.appearsin, p.year, a.name
+           FROM article art, proceedings p, author a, wrote w
+	   WHERE art.pubid = w.pubid
+		  AND art.appearsin = p.pubid
+		  AND w.aid = a.aid
 	),
 	get_article(pubid, year, name) as(
-	   select art.pubid, p.year, a.name
-	   from article art, proceedings p
-	   where art.appearsin = p.pubid
-	     and art.pubid = w.pubid
-	     and w.aid = a.aid
-	     and w.aorder = 1
+	   SELECT art.pubid, p.year, a.name
+	   FROM article art, proceedings p
+	   WHERE art.appearsin = p.pubid
+	     AND art.pubid = w.pubid
+	     AND w.aid = a.aid
+	     AND w.aorder = 1
 	   union
-	   select art.pubid, j.year
-	   from article art, journal j
-	   where art.appearsin = w.pubid
-	     and art.pubid = w.pubid
-	     and w.aid = a.aid
-	     and w.aorder = 1
+	   SELECT art.pubid, j.year
+	   FROM article art, journal j
+	   WHERE art.appearsin = w.pubid
+	     AND art.pubid = w.pubid
+	     AND w.aid = a.aid
+	     AND w.aorder = 1
 	)
-	select b.pubid, 'book' as type, b.year, a.name
-            from get_book b
+	SELECT b.pubid, 'book' as type, b.year, a.name
+            FROM get_book b
         union
-        select j.pubid, 'journal' as type, j.year, '' as name
-            from get_journal j
+        SELECT j.pubid, 'journal' as type, j.year, '' as name
+            FROM get_journal j
         union
-        select p.pubid, 'proceedings' as type, p.year, '' as name
-            from get_proceedings p
+        SELECT p.pubid, 'proceedings' as type, p.year, '' as name
+            FROM get_proceedings p
         union
-        select art.pubid, 'article' as type, ar.year, a.name
-            from get_article art, author a, wrote w
-        order by year desc, name asc;
+        SELECT art.pubid, 'article' as type, ar.year, a.name
+            FROM get_article art, author a, wrote w
+        ORDER BY year desc, name asc;
     EXEC SQL OPEN C1;
 
     for( ; ; ){
@@ -154,9 +154,9 @@ void sorted_publication(){
         if (SQLCODE == 100)  break;
 	else {
 	   EXEC SQL
-             select title INTO :title
-	     from publication
-	     where pubid = :pubid;
+             SELECT title INTO :title
+	     FROM publication
+	     WHERE pubid = :pubid;
          printf("Pubid: %s\n", pubid);
          printf("Type: %s\n", type);
          printf("Title: %s\n", title);
@@ -190,7 +190,7 @@ int main(int argc, char *argv[]) {
    strcpy(author_name, argv[1]);
    sorted_publication();
    
-   /* and get out of here */
+   /* AND get out of here */
    EXEC SQL COMMIT;
    EXEC SQL CONNECT reset;
    exit(0);
